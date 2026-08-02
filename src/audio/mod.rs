@@ -1,11 +1,9 @@
-pub mod capture;
-pub mod devices;
-pub mod playback;
 pub mod record;
+pub mod stream;
 pub mod virtual_mic;
 
 use anyhow::{Context, Result};
-use cpal::traits::{DeviceTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleRate, StreamConfig, SupportedStreamConfig, SupportedStreamConfigRange};
 use ringbuf::traits::Split;
 use ringbuf::HeapRb;
@@ -15,6 +13,20 @@ use std::thread;
 use crate::config::AppConfig;
 use crate::dsp;
 use crate::ui;
+
+/// Print available input/output devices.
+pub fn print_all() -> Result<()> {
+    let host = cpal::default_host();
+    println!("Input devices:");
+    for device in host.input_devices()? {
+        println!("  {}", device.name().unwrap_or_else(|_| "<unnamed>".into()));
+    }
+    println!("Output devices:");
+    for device in host.output_devices()? {
+        println!("  {}", device.name().unwrap_or_else(|_| "<unnamed>".into()));
+    }
+    Ok(())
+}
 
 /// Higher = better quality for our purposes.
 fn format_rank(format: cpal::SampleFormat) -> u8 {
@@ -63,8 +75,8 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
         virtual_mic::VirtualMic::wait_default_sink("vois.rs");
     }
 
-    let input_device = capture::find_input(&host, cfg.input.as_deref())?;
-    let output_device = playback::find_output(&host, cfg.output.as_deref())?;
+    let input_device = stream::find_input(&host, cfg.input.as_deref())?;
+    let output_device = stream::find_output(&host, cfg.output.as_deref())?;
 
     let in_supported = input_device
         .default_input_config()
@@ -136,18 +148,18 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
     let (in_prod, in_cons) = HeapRb::<f32>::new(ring_cap).split();
     let (out_prod, out_cons) = HeapRb::<f32>::new(ring_cap).split();
 
-    let input_stream = capture::start(&input_device, &in_supported, in_prod)?;
-    let output_stream = playback::start(&output_device, &out_supported, out_cons)?;
+    let input_stream = stream::start_input(&input_device, &in_supported, in_prod)?;
+    let output_stream = stream::start_output(&output_device, &out_supported, out_cons)?;
 
     let in_ch = in_cfg.channels as usize;
     let out_ch = out_cfg.channels as usize;
 
     let control = Arc::new(Mutex::new(cfg.to_control()));
-    let stats = Arc::new(Mutex::new(dsp::stats::Stats::default()));
+    let stats = Arc::new(Mutex::new(dsp::control::Stats::default()));
     let worker_control = Arc::clone(&control);
     let worker_stats = Arc::clone(&stats);
     let worker = thread::spawn(move || {
-        dsp::chain::run_worker(
+        dsp::chain::worker::run_worker(
             in_cons,
             out_prod,
             in_ch,
@@ -186,7 +198,7 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
     // Keep the streams alive while the UI blocks.
     let _streams = (input_stream, output_stream);
 
-    ui::tui::run(control, stats, info);
+    ui::run(control, stats, info);
 
     if let Some((stop, handle, prev)) = cleanup {
         stop.store(true, std::sync::atomic::Ordering::Relaxed);

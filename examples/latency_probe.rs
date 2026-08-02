@@ -35,9 +35,9 @@ mod audio {
 #[path = "../src/dsp/mod.rs"]
 mod dsp;
 
-use dsp::chain::{Control, Processor};
-use dsp::pitch::PitchShifter;
-use dsp::stats::Stats;
+use dsp::chain::Processor;
+use dsp::control::{Control, Stats};
+use dsp::shift::PitchShifter;
 
 const FS: u32 = 48000;
 

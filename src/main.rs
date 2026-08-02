@@ -79,10 +79,10 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let file = FileConfig::load();
-    dsp::presets::init_custom(file.to_presets());
+    dsp::preset::init_custom(file.to_presets());
 
     if cli.list {
-        audio::devices::print_all()?;
+        audio::print_all()?;
         return Ok(());
     }
 

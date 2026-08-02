@@ -1,5 +1,5 @@
-use crate::dsp::chain::Control;
-use crate::dsp::presets::{presets, CustomPresetCfg, Preset};
+use crate::dsp::control::Control;
+use crate::dsp::preset::{presets, CustomPresetCfg, Preset};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
