@@ -14,6 +14,8 @@ pub struct Preset {
     pub formant_ratio: f32,
     /// Effects applied in order after pitch/formant.
     pub effects: Vec<EffectSpec>,
+    /// Output makeup gain so every preset sounds equally loud.
+    pub gain: f32,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -79,18 +81,21 @@ fn builtin_presets() -> Vec<Preset> {
             pitch_semitones: 0.0,
             formant_ratio: 1.0,
             effects: vec![],
+            gain: 1.10,
         },
         Preset {
             name: "Girl / Anime".into(),
             pitch_semitones: 5.0,
             formant_ratio: 1.25,
             effects: vec![],
+            gain: 1.50,
         },
         Preset {
             name: "Boy".into(),
             pitch_semitones: 3.0,
             formant_ratio: 1.12,
             effects: vec![],
+            gain: 1.00,
         },
         Preset {
             name: "Manly / Deep".into(),
@@ -101,6 +106,7 @@ fn builtin_presets() -> Vec<Preset> {
                 ratio: 3.0,
                 makeup_db: 2.0,
             }],
+            gain: 1.50,
         },
         Preset {
             name: "Demon".into(),
@@ -117,6 +123,7 @@ fn builtin_presets() -> Vec<Preset> {
                     wet: 0.4,
                 },
             ],
+            gain: 1.00,
         },
         Preset {
             name: "Robot".into(),
@@ -135,6 +142,7 @@ fn builtin_presets() -> Vec<Preset> {
                     target: 0.6,
                 },
             ],
+            gain: 6.00,
         },
         Preset {
             name: "8-bit".into(),
@@ -146,6 +154,7 @@ fn builtin_presets() -> Vec<Preset> {
                 max_gain: 32.0,
                 target: 0.6,
             }],
+            gain: 1.00,
         },
         Preset {
             name: "Alien".into(),
@@ -162,6 +171,7 @@ fn builtin_presets() -> Vec<Preset> {
                     wet: 0.4,
                 },
             ],
+            gain: 5.50,
         },
         Preset {
             name: "Radio".into(),
@@ -180,6 +190,7 @@ fn builtin_presets() -> Vec<Preset> {
                     makeup_db: 6.0,
                 },
             ],
+            gain: 1.00,
         },
         Preset {
             name: "Megaphone".into(),
@@ -201,6 +212,7 @@ fn builtin_presets() -> Vec<Preset> {
                     makeup_db: 4.0,
                 },
             ],
+            gain: 1.60,
         },
         Preset {
             name: "Ghost".into(),
@@ -218,6 +230,7 @@ fn builtin_presets() -> Vec<Preset> {
                     wet: 0.5,
                 },
             ],
+            gain: 1.00,
         },
         Preset {
             name: "Cyborg".into(),
@@ -236,6 +249,7 @@ fn builtin_presets() -> Vec<Preset> {
                     target: 0.6,
                 },
             ],
+            gain: 1.20,
         },
         Preset {
             name: "Chipmunk".into(),
@@ -247,6 +261,7 @@ fn builtin_presets() -> Vec<Preset> {
                 max_gain: 8.0,
                 target: 0.5,
             }],
+            gain: 1.00,
         },
         Preset {
             name: "Helium".into(),
@@ -257,6 +272,7 @@ fn builtin_presets() -> Vec<Preset> {
                 rate_hz: 0.6,
                 wet: 0.3,
             }],
+            gain: 1.20,
         },
         Preset {
             name: "Vader".into(),
@@ -267,6 +283,7 @@ fn builtin_presets() -> Vec<Preset> {
                 damp: 0.3,
                 wet: 0.35,
             }],
+            gain: 2.80,
         },
         Preset {
             name: "Telephone".into(),
@@ -285,6 +302,7 @@ fn builtin_presets() -> Vec<Preset> {
                     makeup_db: 8.0,
                 },
             ],
+            gain: 1.00,
         },
         Preset {
             name: "Growl".into(),
@@ -301,6 +319,7 @@ fn builtin_presets() -> Vec<Preset> {
                     wet: 0.3,
                 },
             ],
+            gain: 1.00,
         },
     ]
 }

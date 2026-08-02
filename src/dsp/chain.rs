@@ -132,6 +132,7 @@ impl Processor {
             formant,
             gate_db,
             gain,
+            preset_gain,
             mute,
             record,
             mode,
@@ -149,6 +150,7 @@ impl Processor {
                 preset.formant_ratio * ratio_from_semitones(ctrl.formant_delta),
                 ctrl.gate_threshold_db,
                 ctrl.gain,
+                preset.gain,
                 ctrl.mute,
                 ctrl.record,
                 ctrl.mode,
@@ -222,7 +224,7 @@ impl Processor {
             }
 
             for s in mono.iter_mut() {
-                *s *= gain;
+                *s *= preset_gain * gain;
             }
         }
 
