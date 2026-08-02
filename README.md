@@ -63,6 +63,7 @@ vois.rs turns your microphone into a voice changer in real time: shift pitch and
 | Vader | −10 st | 0.60× | reverb |
 | Telephone | 0 st | 1.00× | bandpass + noise + compressor |
 | Growl | −5 st | 0.70× | distortion + reverb |
+| Walkie-Talkie | 0 st | 1.05× | narrow bandpass + bitcrush + squelch noise + compressor |
 
 ### Usage
 
@@ -183,6 +184,7 @@ vois.rs превращает твой микрофон в войс-чендже�
 | Vader | −10 пт | 0.60× | реверб |
 | Telephone | 0 пт | 1.00× | полосовой фильтр + шум + компрессор |
 | Growl | −5 пт | 0.70× | дисторшн + реверб |
+| Walkie-Talkie | 0 пт | 1.05× | узкий bandpass + биткраш + сквилч-шум + компрессор |
 
 ### Запуск
 

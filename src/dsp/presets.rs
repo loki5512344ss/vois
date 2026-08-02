@@ -305,6 +305,31 @@ fn builtin_presets() -> Vec<Preset> {
             gain: 1.00,
         },
         Preset {
+            name: "Walkie-Talkie".into(),
+            pitch_semitones: 0.0,
+            formant_ratio: 1.05,
+            effects: vec![
+                EffectSpec::Bandpass {
+                    low_hz: 500.0,
+                    high_hz: 2400.0,
+                    mix: 1.0,
+                },
+                EffectSpec::Bitcrush {
+                    bits: 8,
+                    sample_rate_div: 2,
+                    max_gain: 4.0,
+                    target: 0.6,
+                },
+                EffectSpec::Noise { gain: 0.05 },
+                EffectSpec::Compressor {
+                    threshold_db: -20.0,
+                    ratio: 4.0,
+                    makeup_db: 4.0,
+                },
+            ],
+            gain: 1.30,
+        },
+        Preset {
             name: "Growl".into(),
             pitch_semitones: -5.0,
             formant_ratio: 0.7,
