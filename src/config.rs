@@ -55,6 +55,7 @@ impl FileConfig {
                         formant_ratio: c.formant.unwrap_or(1.0),
                         effects: c.effects.clone().unwrap_or_default(),
                         gain: 1.0,
+                        gate_db: c.gate_db.unwrap_or(-100.0),
                     })
                     .collect()
             })

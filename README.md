@@ -33,7 +33,7 @@ vois.rs turns your microphone into a voice changer in real time: shift pitch and
 | Real-time pitch shift | Phase-vocoder, −12…+12 semitones, formants preserved |
 | Formant shift | Change the timbre (girl / deep / bright) independently of pitch |
 | 12 presets | Clean, Girl/Anime, Boy, Manly/Deep, Demon, Robot, 8-bit, Alien, Radio, Megaphone, Ghost, Cyborg |
-| Effects | Vocoder, bitcrush, distortion, reverb, chorus, ring-mod, bandpass, noise, compressor, noise gate |
+| Effects | Vocoder, bitcrush, distortion, overdrive, reverb, chorus, flanger, tremolo, ring-mod, bandpass, noise, compressor, noise gate |
 | Virtual microphone | Built-in `vois.rs` mic (PipeWire/PulseAudio) — no VB-CABLE needed on Linux |
 | Auto-Tune | Optional pitch snap to the nearest semitone (smooth, no wobble) |
 | Config file | Defaults + custom presets in `~/.config/vois/config.toml` |
@@ -47,23 +47,23 @@ vois.rs turns your microphone into a voice changer in real time: shift pitch and
 | Preset | Pitch | Formant | Effects |
 |--------|-------|---------|---------|
 | Clean | 0 st | 1.00× | passthrough (A/B compare) |
-| Girl / Anime | +5 st | 1.25× | — |
-| Boy | +3 st | 1.12× | — |
+| Girl / Anime | +5 st | 1.25× | chorus + overdrive |
+| Boy | +2 st | 1.08× | compressor |
 | Manly / Deep | −4 st | 0.78× | compressor |
-| Demon | −9 st | 0.85× | distortion + reverb |
+| Demon | −9 st | 0.85× | overdrive + reverb + tremolo |
 | Robot | 0 st | 1.00× | channel vocoder + bitcrush |
 | 8-bit | 0 st | 1.00× | bitcrush (5-bit, decimate ×4, auto-level) |
-| Alien | −2 st | 1.15× | ring-mod + chorus |
+| Alien | −2 st | 1.15× | ring-mod + flanger |
 | Radio | 0 st | 1.00× | bandpass + noise + compressor |
 | Megaphone | 0 st | 1.00× | distortion + narrow EQ + compressor |
-| Ghost | −3 st | 1.05× | big reverb + chorus |
-| Cyborg | +2 st | 1.00× | vocoder + bitcrush |
-| Chipmunk | +7 st | 1.40× | bitcrush |
+| Ghost | −3 st | 1.05× | big reverb + chorus + tremolo |
+| Cyborg | +2 st | 1.00× | saw vocoder + overdrive + bitcrush |
+| Chipmunk | +7 st | 1.40× | chorus |
 | Helium | +10 st | 1.50× | chorus |
-| Vader | −10 st | 0.60× | reverb |
+| Vader | −10 st | 0.60× | overdrive + reverb + tremolo |
 | Telephone | 0 st | 1.00× | bandpass + noise + compressor |
-| Growl | −5 st | 0.70× | distortion + reverb |
-| Walkie-Talkie | 0 st | 1.05× | narrow bandpass + bitcrush + squelch noise + compressor |
+| Growl | −5 st | 0.70× | distortion + compressor + reverb |
+| Walkie-Talkie | 0 st | 1.05× | narrow bandpass + squelch noise + compressor + bitcrush |
 
 ### Usage
 
@@ -107,9 +107,9 @@ virtual_mic = true
 ] }
 ```
 
-Any CLI option overrides the file. Effects: `Distortion`, `Bitcrush`, `Reverb`,
-`Chorus`, `RingMod`, `Bandpass`, `Noise`, `Compressor`, `Vocoder` (carrier:
-`Noise` / `Saw`).
+Any CLI option overrides the file. Effects: `Distortion`, `Overdrive`, `Bitcrush`, `Reverb`, `Chorus`, `Flanger`,
+`Tremolo`, `RingMod`, `Bandpass`, `Noise`, `Compressor`, `Vocoder` (carrier:
+`Noise` / `Saw` / `Input`). Custom presets also accept `gate_db`.
 
 ### Dependencies
 
@@ -154,7 +154,7 @@ vois.rs превращает твой микрофон в войс-чендже�
 | Сдвиг высоты | Фазовый вокодер, −12…+12 полутонов, форманты сохраняются |
 | Сдвиг формант | Меняет тембр (девушка / глубокий / звонкий) независимо от высоты |
 | 12 пресетов | Clean, Girl/Anime, Boy, Manly/Deep, Demon, Robot, 8-bit, Alien, Radio, Megaphone, Ghost, Cyborg |
-| Эффекты | Вокодер, биткраш, дисторшн, реверб, хорус, кольцевая модуляция, полосовой фильтр, шум, компрессор, шумоподавитель |
+| Эффекты | Вокодер, биткраш, дисторшн, овердрайв, реверб, хорус, флэнджер, тремоло, кольцевая модуляция, полосовой фильтр, шум, компрессор, шумоподавитель |
 | Виртуальный микрофон | Встроенный `vois.rs` (PipeWire/PulseAudio) — на Linux не нужен VB-CABLE |
 | Автолюн (Auto-Tune) | Снап высоты к ближайшему полутону (плавно, без «плавания») |
 | Конфиг-файл | Дефолты и свои пресеты в `~/.config/vois/config.toml` |
@@ -168,23 +168,23 @@ vois.rs превращает твой микрофон в войс-чендже�
 | Пресет | Высота | Форманты | Эффекты |
 |--------|--------|----------|---------|
 | Clean | 0 пт | 1.00× | passthrough (сравнение A/B) |
-| Girl / Anime | +5 пт | 1.25× | — |
-| Boy | +3 пт | 1.12× | — |
+| Girl / Anime | +5 пт | 1.25× | хорус + овердрайв |
+| Boy | +2 пт | 1.08× | компрессор |
 | Manly / Deep | −4 пт | 0.78× | компрессор |
-| Demon | −9 пт | 0.85× | дисторшн + реверб |
+| Demon | −9 пт | 0.85× | овердрайв + реверб + тремоло |
 | Robot | 0 пт | 1.00× | вокодер + биткраш |
 | 8-bit | 0 пт | 1.00× | биткраш (5 бит, децимация ×4, автолевел) |
-| Alien | −2 пт | 1.15× | кольцевая модуляция + хорус |
+| Alien | −2 пт | 1.15× | кольцевая модуляция + флэнджер |
 | Radio | 0 пт | 1.00× | полосовой фильтр + шум + компрессор |
 | Megaphone | 0 пт | 1.00× | дисторшн + узкий EQ + компрессор |
-| Ghost | −3 пт | 1.05× | большой реверб + хорус |
-| Cyborg | +2 пт | 1.00× | вокодер + биткраш |
-| Chipmunk | +7 пт | 1.40× | биткраш |
+| Ghost | −3 пт | 1.05× | большой реверб + хорус + тремоло |
+| Cyborg | +2 пт | 1.00× | saw-вокодер + овердрайв + биткраш |
+| Chipmunk | +7 пт | 1.40× | хорус |
 | Helium | +10 пт | 1.50× | хорус |
-| Vader | −10 пт | 0.60× | реверб |
+| Vader | −10 пт | 0.60× | овердрайв + реверб + тремоло |
 | Telephone | 0 пт | 1.00× | полосовой фильтр + шум + компрессор |
-| Growl | −5 пт | 0.70× | дисторшн + реверб |
-| Walkie-Talkie | 0 пт | 1.05× | узкий bandpass + биткраш + сквилч-шум + компрессор |
+| Growl | −5 пт | 0.70× | дисторшн + компрессор + реверб |
+| Walkie-Talkie | 0 пт | 1.05× | узкий bandpass + сквилч-шум + компрессор + биткраш |
 
 ### Запуск
 
@@ -228,9 +228,9 @@ virtual_mic = true
 ] }
 ```
 
-Любой CLI-флаг перекрывает файл. Эффекты: `Distortion`, `Bitcrush`, `Reverb`,
-`Chorus`, `RingMod`, `Bandpass`, `Noise`, `Compressor`, `Vocoder` (carrier:
-`Noise` / `Saw`).
+Любой CLI-флаг перекрывает файл. Эффекты: `Distortion`, `Overdrive`, `Bitcrush`, `Reverb`, `Chorus`, `Flanger`,
+`Tremolo`, `RingMod`, `Bandpass`, `Noise`, `Compressor`, `Vocoder` (carrier:
+`Noise` / `Saw` / `Input`). Свои пресеты также принимают `gate_db`.
 
 ### Зависимости
 

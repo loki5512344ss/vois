@@ -128,7 +128,11 @@ impl App {
                     preset.name.to_string(),
                     preset.pitch_semitones + c.pitch_delta,
                     preset.formant_ratio * 2f32.powf(c.formant_delta / 12.0),
-                    c.gate_threshold_db,
+                    if c.gate_threshold_db > -90.0 {
+                        c.gate_threshold_db
+                    } else {
+                        preset.gate_db
+                    },
                     c.gain,
                     c.mute,
                     c.record,

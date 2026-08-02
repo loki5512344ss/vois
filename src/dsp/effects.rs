@@ -497,6 +497,138 @@ impl Effect for Compressor {
 }
 
 // ---------------------------------------------------------------------------
+// Overdrive (soft tube-style saturation, unity gain at low levels)
+// ---------------------------------------------------------------------------
+
+pub struct Overdrive {
+    drive: f32,
+    output: f32,
+}
+
+impl Overdrive {
+    pub fn new(drive: f32, output: f32) -> Self {
+        Self {
+            drive: drive.max(0.01),
+            output,
+        }
+    }
+}
+
+impl Effect for Overdrive {
+    fn process(&mut self, mono: &mut [f32]) {
+        let d = self.drive;
+        let o = self.output;
+        for s in mono.iter_mut() {
+            *s = ((*s * d).atan() / d) * o;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tremolo (LFO amplitude modulation)
+// ---------------------------------------------------------------------------
+
+pub struct Tremolo {
+    depth: f32,
+    rate: f32,
+    phase: f32,
+    fs: f32,
+}
+
+impl Tremolo {
+    pub fn new(sample_rate: u32, depth: f32, rate_hz: f32) -> Self {
+        Self {
+            depth: depth.clamp(0.0, 1.0),
+            rate: rate_hz,
+            phase: 0.0,
+            fs: sample_rate as f32,
+        }
+    }
+}
+
+impl Effect for Tremolo {
+    fn process(&mut self, mono: &mut [f32]) {
+        for s in mono.iter_mut() {
+            let lfo = (2.0 * PI * self.phase).sin();
+            let amp = 1.0 - self.depth * (0.5 - 0.5 * lfo);
+            *s *= amp;
+            self.phase += self.rate / self.fs;
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Flanger (short modulated delay with feedback)
+// ---------------------------------------------------------------------------
+
+pub struct Flanger {
+    delay: Vec<f32>,
+    idx: usize,
+    cap: usize,
+    base: f32,
+    depth: f32,
+    rate: f32,
+    feedback: f32,
+    wet: f32,
+    phase: f32,
+    fs: f32,
+}
+
+impl Flanger {
+    pub fn new(sample_rate: u32, depth_ms: f32, rate_hz: f32, feedback: f32, wet: f32) -> Self {
+        let depth = (depth_ms / 1000.0 * sample_rate as f32).max(1.0);
+        let cap = (sample_rate as f32 * 0.1) as usize + (depth * 2.0) as usize + 2;
+        Self {
+            delay: vec![0.0; cap],
+            idx: 0,
+            cap,
+            base: depth * 0.5,
+            depth: depth * 0.5,
+            rate: rate_hz,
+            feedback: feedback.clamp(0.0, 0.9),
+            wet: wet.clamp(0.0, 1.0),
+            phase: 0.0,
+            fs: sample_rate as f32,
+        }
+    }
+
+    #[inline]
+    fn read(&self, offset: f32) -> f32 {
+        let mut pos = self.idx as f32 - offset;
+        if pos < 0.0 {
+            pos += self.cap as f32;
+        }
+        let i = pos.floor() as usize % self.cap;
+        let j = (i + 1) % self.cap;
+        let t = pos - pos.floor();
+        self.delay[i] * (1.0 - t) + self.delay[j] * t
+    }
+}
+
+impl Effect for Flanger {
+    fn process(&mut self, mono: &mut [f32]) {
+        let wet = self.wet;
+        let dry = 1.0 - wet;
+        for s in mono.iter_mut() {
+            let lfo = (2.0 * PI * self.phase).sin();
+            let offset = self.base + self.depth * lfo;
+            let delayed = self.read(offset);
+            let y = *s * dry + delayed * wet;
+            self.delay[self.idx] = *s + delayed * self.feedback;
+            *s = y;
+            self.idx = (self.idx + 1) % self.cap;
+            self.phase += self.rate / self.fs;
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Channel vocoder (classic robot voice)
 // ---------------------------------------------------------------------------
 
@@ -504,6 +636,7 @@ impl Effect for Compressor {
 pub enum CarrierKind {
     Noise,
     Saw,
+    Input,
 }
 
 pub struct ChannelVocoder {
@@ -511,6 +644,9 @@ pub struct ChannelVocoder {
     carrier: CarrierKind,
     bands_count: usize,
     wet: f32,
+    /// Output makeup so vocoder presets stay loud without giant external gain.
+    makeup: f32,
+    carrier_hz: f32,
     phase: f32,
     noise_state: u32,
     fs: f32,
@@ -523,7 +659,13 @@ struct VocoderBand {
 }
 
 impl ChannelVocoder {
-    pub fn new(sample_rate: u32, bands_count: usize, carrier: CarrierKind, wet: f32) -> Self {
+    pub fn new(
+        sample_rate: u32,
+        bands_count: usize,
+        carrier: CarrierKind,
+        carrier_hz: f32,
+        wet: f32,
+    ) -> Self {
         let fs = sample_rate as f32;
         let low: f32 = 150.0;
         let high: f32 = 4500.0;
@@ -546,6 +688,8 @@ impl ChannelVocoder {
             carrier,
             bands_count: n,
             wet: wet.clamp(0.0, 1.0),
+            makeup: 5.0,
+            carrier_hz: carrier_hz.max(20.0),
             phase: 0.0,
             noise_state: 0x2545F491,
             fs,
@@ -553,7 +697,7 @@ impl ChannelVocoder {
     }
 
     #[inline]
-    fn carrier_sample(&mut self) -> f32 {
+    fn carrier_sample(&mut self, input: f32) -> f32 {
         match self.carrier {
             CarrierKind::Noise => {
                 let mut x = self.noise_state;
@@ -565,12 +709,13 @@ impl ChannelVocoder {
             }
             CarrierKind::Saw => {
                 let s = self.phase * 2.0 - 1.0;
-                self.phase += 1.0 / self.fs * 120.0;
+                self.phase += self.carrier_hz / self.fs;
                 if self.phase >= 1.0 {
                     self.phase -= 1.0;
                 }
                 s
             }
+            CarrierKind::Input => input,
         }
     }
 }
@@ -585,7 +730,7 @@ impl Effect for ChannelVocoder {
 
         for s in mono.iter_mut() {
             let input = *s;
-            let carrier = self.carrier_sample();
+            let carrier = self.carrier_sample(input);
 
             let mut acc = 0.0;
             for band in &mut self.bands {
@@ -599,7 +744,7 @@ impl Effect for ChannelVocoder {
                 acc += band.synthesis.tick(carrier) * band.env;
             }
 
-            *s = input * dry + acc * wet * inv_n * 4.0;
+            *s = input * dry + acc * wet * inv_n * self.makeup;
         }
     }
 }

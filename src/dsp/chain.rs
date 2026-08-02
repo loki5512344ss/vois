@@ -148,7 +148,12 @@ impl Processor {
                 ctrl.preset_idx.min(presets().len() - 1),
                 preset.pitch_semitones + ctrl.pitch_delta,
                 preset.formant_ratio * ratio_from_semitones(ctrl.formant_delta),
-                ctrl.gate_threshold_db,
+                // User-set gate wins; otherwise fall back to the preset's gate.
+                if ctrl.gate_threshold_db > -90.0 {
+                    ctrl.gate_threshold_db
+                } else {
+                    preset.gate_db
+                },
                 ctrl.gain,
                 preset.gain,
                 ctrl.mute,
