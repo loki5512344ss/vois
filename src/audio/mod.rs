@@ -53,29 +53,42 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
     let in_supported = input_device
         .default_input_config()
         .context("failed to read default input config")?;
-
-    let rate = cfg
-        .sample_rate
-        .map(SampleRate)
-        .unwrap_or_else(|| in_supported.sample_rate());
-
-    let in_supported = if cfg.sample_rate.is_some() {
-        pick_config(
-            input_device.supported_input_configs()?,
-            in_supported.channels(),
-            rate,
-        )
-        .with_context(|| format!("input device does not support sample rate {} Hz", rate.0))?
-    } else {
-        in_supported
-    };
-
+    let in_channels = in_supported.channels();
     let out_default = output_device
         .default_output_config()
         .context("failed to read default output config")?;
+    let out_channels = out_default.channels();
+
+    // Negotiate one sample rate both devices support, preferring 48 kHz.
+    let rate = if let Some(r) = cfg.sample_rate {
+        SampleRate(r)
+    } else {
+        let in_ranges = input_device.supported_input_configs()?;
+        let out_ranges = output_device.supported_output_configs()?;
+        let in_ranges: Vec<_> = in_ranges.collect();
+        let out_ranges: Vec<_> = out_ranges.collect();
+        let mut chosen = in_supported.sample_rate();
+        for r in [
+            SampleRate(48000),
+            SampleRate(44100),
+            in_supported.sample_rate(),
+        ] {
+            if pick_config(in_ranges.iter().cloned(), in_channels, r).is_some()
+                && pick_config(out_ranges.iter().cloned(), out_channels, r).is_some()
+            {
+                chosen = r;
+                break;
+            }
+        }
+        chosen
+    };
+
+    let in_supported = pick_config(input_device.supported_input_configs()?, in_channels, rate)
+        .with_context(|| format!("input device does not support sample rate {} Hz", rate.0))?;
+
     let out_supported = pick_config(
         output_device.supported_output_configs()?,
-        out_default.channels(),
+        out_channels,
         rate,
     )
     .with_context(|| {

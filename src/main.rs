@@ -5,6 +5,7 @@ mod ui;
 
 use anyhow::Result;
 use clap::Parser;
+use config::FileConfig;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -29,49 +30,40 @@ pub struct Cli {
     #[arg(long, help = "List available audio devices and exit")]
     pub list: bool,
 
-    #[arg(
-        short = 'p',
-        long,
-        default_value = "Clean",
-        help = "Starting preset name"
-    )]
-    pub preset: String,
+    #[arg(short = 'p', long, help = "Preset name (config/default: Clean)")]
+    pub preset: Option<String>,
 
-    #[arg(
-        long,
-        help = "Record processed audio to a WAV file (also toggle with R in the UI)"
-    )]
+    #[arg(long, help = "Record processed audio to a WAV file")]
     pub record: Option<String>,
 
-    #[arg(long, default_value_t = 0.0, help = "Initial pitch shift in semitones")]
-    pub pitch: f32,
+    #[arg(long, help = "Initial pitch shift in semitones")]
+    pub pitch: Option<f32>,
+
+    #[arg(long, help = "Initial formant shift in semitones")]
+    pub formant: Option<f32>,
+
+    #[arg(long, help = "Noise gate threshold in dB (default -100 = off)")]
+    pub gate: Option<f32>,
+
+    #[arg(long, help = "Output gain (1.0 = unity)")]
+    pub gain: Option<f32>,
 
     #[arg(
         long,
-        default_value_t = 0.0,
-        help = "Initial formant shift in semitones"
+        num_args = 0..=1,
+        default_missing_value = "true",
+        help = "Snap pitch to the nearest semitone (Auto-Tune)"
     )]
-    pub formant: f32,
-
-    #[arg(
-        long,
-        default_value_t = -100.0,
-        help = "Noise gate threshold in dB (default -100 = off)"
-    )]
-    pub gate: f32,
-
-    #[arg(long, default_value_t = 1.0, help = "Output gain (1.0 = unity)")]
-    pub gain: f32,
+    pub pitch_correct: Option<bool>,
 
     #[arg(long, help = "Exit automatically after this many seconds")]
     pub run_seconds: Option<u32>,
 
     #[arg(
         long,
-        default_value_t = 0.0,
         help = "Mix a test tone (Hz) into the input; 0 = off. Useful to hear presets without a mic"
     )]
-    pub tone: f32,
+    pub tone: Option<f32>,
 
     #[arg(long, help = "List available presets and exit")]
     pub list_presets: bool,
@@ -86,6 +78,9 @@ pub struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    let file = FileConfig::load();
+    dsp::presets::init_custom(file.to_presets());
+
     if cli.list {
         audio::devices::print_all()?;
         return Ok(());
@@ -93,10 +88,16 @@ fn main() -> Result<()> {
 
     if cli.list_presets {
         println!("Available presets: {}", config::AppConfig::preset_names());
+        println!(
+            "Config file: {} (create it to set defaults and custom presets)",
+            FileConfig::config_path().display()
+        );
         return Ok(());
     }
 
-    if !cli.no_virtual_mic {
+    let cfg = config::AppConfig::from_cli(&cli);
+
+    if cfg.virtual_mic {
         match audio::virtual_mic::VirtualMic::setup() {
             Ok(Some(src)) => {
                 println!(
@@ -108,6 +109,5 @@ fn main() -> Result<()> {
         }
     }
 
-    let cfg = config::AppConfig::from_cli(&cli);
     audio::run(&cfg)
 }

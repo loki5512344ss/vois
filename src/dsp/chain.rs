@@ -3,7 +3,7 @@ use crate::dsp::effects::Effect;
 use crate::dsp::formant::ratio_from_semitones;
 use crate::dsp::gate::NoiseGate;
 use crate::dsp::pitch::PitchShifter;
-use crate::dsp::presets::{build_effects, PRESETS};
+use crate::dsp::presets::{build_effects, presets};
 use crate::dsp::stats::Stats;
 use ringbuf::traits::{Consumer, Producer};
 use std::sync::mpsc::Sender;
@@ -45,6 +45,8 @@ pub struct Control {
     pub run_seconds: Option<u32>,
     /// Test tone frequency (Hz) mixed into the input; 0 = off.
     pub tone_hz: f32,
+    /// Snap the voice to the nearest semitone (Auto-Tune style).
+    pub pitch_correct: bool,
     pub mode: Mode,
     pub quit: bool,
 }
@@ -62,6 +64,7 @@ impl Default for Control {
             record_path: None,
             run_seconds: None,
             tone_hz: 0.0,
+            pitch_correct: false,
             mode: Mode::Live,
             quit: false,
         }
@@ -74,6 +77,8 @@ pub struct Processor {
     stats: Arc<Mutex<Stats>>,
     shifter: Option<PitchShifter>,
     shift_pending: Vec<f32>,
+    /// Smoothed Auto-Tune correction in semitones.
+    correction: f32,
     gate: NoiseGate,
     effects: Vec<Box<dyn Effect>>,
     last_preset: usize,
@@ -89,6 +94,7 @@ impl Processor {
             stats,
             shifter: None,
             shift_pending: Vec::new(),
+            correction: 0.0,
             gate: NoiseGate::new(-60.0),
             effects: Vec::new(),
             last_preset: usize::MAX,
@@ -120,14 +126,25 @@ impl Processor {
         }
         let in_rms = (in_sum / mono.len() as f32).sqrt();
 
-        let (preset_idx, pitch, formant, gate_db, gain, mute, record, mode, record_path) = {
+        let (
+            preset_idx,
+            pitch,
+            formant,
+            gate_db,
+            gain,
+            mute,
+            record,
+            mode,
+            record_path,
+            pitch_correct,
+        ) = {
             let ctrl = match self.control.lock() {
                 Ok(c) => c,
                 Err(p) => p.into_inner(),
             };
-            let preset = &PRESETS[ctrl.preset_idx.min(PRESETS.len() - 1)];
+            let preset = &presets()[ctrl.preset_idx.min(presets().len() - 1)];
             (
-                ctrl.preset_idx.min(PRESETS.len() - 1),
+                ctrl.preset_idx.min(presets().len() - 1),
                 preset.pitch_semitones + ctrl.pitch_delta,
                 preset.formant_ratio * ratio_from_semitones(ctrl.formant_delta),
                 ctrl.gate_threshold_db,
@@ -136,15 +153,17 @@ impl Processor {
                 ctrl.record,
                 ctrl.mode,
                 ctrl.record_path.clone(),
+                ctrl.pitch_correct,
             )
         };
 
         if preset_idx != self.last_preset {
-            self.effects = build_effects(PRESETS[preset_idx].effects, self.fs);
+            self.effects = build_effects(&presets()[preset_idx].effects, self.fs);
             self.last_preset = preset_idx;
         }
 
-        let shifter_active = (pitch - 0.0).abs() > 0.05 || (formant - 1.0).abs() > 0.01;
+        let mut shifter_active = (pitch - 0.0).abs() > 0.05 || (formant - 1.0).abs() > 0.01;
+        shifter_active |= pitch_correct;
 
         if mute {
             mono.fill(0.0);
@@ -165,7 +184,24 @@ impl Processor {
                     self.shift_pending = vec![0.0; 1024 - 256];
                 }
                 let shifter = self.shifter.as_mut().unwrap();
-                shifter.pitch_ratio = 2f32.powf(pitch / 12.0);
+
+                // Auto-Tune: glide the manual pitch toward the nearest semitone
+                // of the detected input fundamental (smoothed so it doesn't
+                // wobble). Detection happens on the input frame, so the
+                // correction applies from the next block onward.
+                if pitch_correct {
+                    let f0 = shifter.last_f0;
+                    if (70.0..1200.0).contains(&f0) {
+                        let current = 12.0 * (f0 / 440.0).log2();
+                        let target = current.round() - current;
+                        self.correction += (target - self.correction) * 0.25;
+                    }
+                } else {
+                    self.correction = 0.0;
+                }
+                let effective = pitch + self.correction;
+
+                shifter.pitch_ratio = 2f32.powf(effective / 12.0);
                 shifter.formant_ratio = formant;
                 let mut out = Vec::with_capacity(mono.len());
                 shifter.process(mono, &mut out);

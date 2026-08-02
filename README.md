@@ -35,6 +35,8 @@ vois.rs turns your microphone into a voice changer in real time: shift pitch and
 | 12 presets | Clean, Girl/Anime, Boy, Manly/Deep, Demon, Robot, 8-bit, Alien, Radio, Megaphone, Ghost, Cyborg |
 | Effects | Vocoder, bitcrush, distortion, reverb, chorus, ring-mod, bandpass, noise, compressor, noise gate |
 | Virtual microphone | Built-in `vois.rs` mic (PipeWire/PulseAudio) — no VB-CABLE needed on Linux |
+| Auto-Tune | Optional pitch snap to the nearest semitone (smooth, no wobble) |
+| Config file | Defaults + custom presets in `~/.config/vois/config.toml` |
 | TUI | Full-screen terminal UI with arrow-key + mouse control and live meters |
 | WAV recording | Record the processed audio with the `R` hotkey or `--record` |
 | Test tone | `--tone 220` lets you hear what a preset does without a mic |
@@ -56,17 +58,22 @@ vois.rs turns your microphone into a voice changer in real time: shift pitch and
 | Megaphone | 0 st | 1.00× | distortion + narrow EQ + compressor |
 | Ghost | −3 st | 1.05× | big reverb + chorus |
 | Cyborg | +2 st | 1.00× | vocoder + bitcrush |
+| Chipmunk | +7 st | 1.40× | bitcrush |
+| Helium | +10 st | 1.50× | chorus |
+| Vader | −10 st | 0.60× | reverb |
+| Telephone | 0 st | 1.00× | bandpass + noise + compressor |
+| Growl | −5 st | 0.70× | distortion + reverb |
 
 ### Usage
 
 ```bash
-cargo build --release
-./target/release/vois                          # virtual mic is ON by default
-./target/release/vois -p "Girl / Anime"        # pick a preset
-./target/release/vois --no-virtual-mic         # just output to your speakers
-./target/release/vois --tone 220               # hear presets without a mic
-./target/release/vois --list                   # list audio devices
-./target/release/vois --list-presets           # list presets
+make install     # installs `vois` to ~/.local/bin (make sure it's on PATH)
+vois             # just works: auto-picks devices, virtual mic on, 48 kHz
+vois -p "Girl / Anime"
+vois --no-virtual-mic            # output to your speakers instead
+vois --pitch-correct             # Auto-Tune on
+vois --tone 220                  # hear presets without a mic
+vois --list / --list-presets     # list devices / presets
 ```
 
 In Discord / Zoom / OBS select **`vois.rs`** as your microphone.
@@ -81,7 +88,27 @@ In Discord / Zoom / OBS select **`vois.rs`** as your microphone.
 | `H` | help |
 | `Q` / `Ctrl+C` | quit |
 
-Settings screen: `↑↓` select, `←→` / `Enter` change, `Esc` back — preset, pitch, formant, gate threshold (dB), gain (dB), mute, LIVE/PASSTHROUGH mode, record.
+Settings screen: `↑↓` select, `←→` / `Enter` change, `Esc` back — preset, pitch, formant, gate threshold (dB), gain (dB), mute, LIVE/PASSTHROUGH mode, record, Auto-Tune (pitch corr).
+
+### Config file
+
+Create `~/.config/vois/config.toml` to set defaults and define your own presets:
+
+```toml
+# ~/.config/vois/config.toml
+preset = "Deep Robot"
+virtual_mic = true
+
+[custom_presets]
+"Deep Robot" = { pitch = -6, formant = 0.8, effects = [
+    { Vocoder = { bands = 16, carrier = "Noise", wet = 1.0 } },
+    { Reverb = { room = 0.5, damp = 0.4, wet = 0.3 } },
+] }
+```
+
+Any CLI option overrides the file. Effects: `Distortion`, `Bitcrush`, `Reverb`,
+`Chorus`, `RingMod`, `Bandpass`, `Noise`, `Compressor`, `Vocoder` (carrier:
+`Noise` / `Saw`).
 
 ### Dependencies
 
@@ -128,6 +155,8 @@ vois.rs превращает твой микрофон в войс-чендже�
 | 12 пресетов | Clean, Girl/Anime, Boy, Manly/Deep, Demon, Robot, 8-bit, Alien, Radio, Megaphone, Ghost, Cyborg |
 | Эффекты | Вокодер, биткраш, дисторшн, реверб, хорус, кольцевая модуляция, полосовой фильтр, шум, компрессор, шумоподавитель |
 | Виртуальный микрофон | Встроенный `vois.rs` (PipeWire/PulseAudio) — на Linux не нужен VB-CABLE |
+| Автолюн (Auto-Tune) | Снап высоты к ближайшему полутону (плавно, без «плавания») |
+| Конфиг-файл | Дефолты и свои пресеты в `~/.config/vois/config.toml` |
 | TUI | Полноэкранный интерфейс с управлением стрелками и мышью, живые уровни |
 | Запись в WAV | Клавиша `R` или `--record` |
 | Тестовый тон | `--tone 220` — послушать пресет без микрофона |
@@ -149,17 +178,22 @@ vois.rs превращает твой микрофон в войс-чендже�
 | Megaphone | 0 пт | 1.00× | дисторшн + узкий EQ + компрессор |
 | Ghost | −3 пт | 1.05× | большой реверб + хорус |
 | Cyborg | +2 пт | 1.00× | вокодер + биткраш |
+| Chipmunk | +7 пт | 1.40× | биткраш |
+| Helium | +10 пт | 1.50× | хорус |
+| Vader | −10 пт | 0.60× | реверб |
+| Telephone | 0 пт | 1.00× | полосовой фильтр + шум + компрессор |
+| Growl | −5 пт | 0.70× | дисторшн + реверб |
 
 ### Запуск
 
 ```bash
-cargo build --release
-./target/release/vois                          # виртуальный микрофон включён по умолчанию
-./target/release/vois -p "Girl / Anime"        # выбрать пресет
-./target/release/vois --no-virtual-mic         # просто вывод в колонки/наушники
-./target/release/vois --tone 220               # послушать пресеты без микрофона
-./target/release/vois --list                   # список устройств
-./target/release/vois --list-presets           # список пресетов
+make install     # ставит `vois` в ~/.local/bin (проверь что он в PATH)
+vois             # просто работает: авто-устройства, виртуальный микрофон, 48 кГц
+vois -p "Girl / Anime"
+vois --no-virtual-mic            # вывод в колонки/наушники
+vois --pitch-correct             # автолюн
+vois --tone 220                  # послушать пресеты без микрофона
+vois --list / --list-presets     # список устройств / пресетов
 ```
 
 В Discord / Zoom / OBS выбери микрофон **`vois.rs`**.
@@ -174,7 +208,27 @@ cargo build --release
 | `H` | справка |
 | `Q` / `Ctrl+C` | выход |
 
-Экран настроек: `↑↓` выбор, `←→` / `Enter` изменение, `Esc` назад — пресет, pitch, formant, порог шумоподавителя (дБ), усиление (дБ), mute, режим LIVE/PASSTHROUGH, запись.
+Экран настроек: `↑↓` выбор, `←→` / `Enter` изменение, `Esc` назад — пресет, pitch, formant, порог шумоподавителя (дБ), усиление (дБ), mute, режим LIVE/PASSTHROUGH, запись, автолюн.
+
+### Конфиг-файл
+
+Создай `~/.config/vois/config.toml` для дефолтов и своих пресетов:
+
+```toml
+# ~/.config/vois/config.toml
+preset = "Deep Robot"
+virtual_mic = true
+
+[custom_presets]
+"Deep Robot" = { pitch = -6, formant = 0.8, effects = [
+    { Vocoder = { bands = 16, carrier = "Noise", wet = 1.0 } },
+    { Reverb = { room = 0.5, damp = 0.4, wet = 0.3 } },
+] }
+```
+
+Любой CLI-флаг перекрывает файл. Эффекты: `Distortion`, `Bitcrush`, `Reverb`,
+`Chorus`, `RingMod`, `Bandpass`, `Noise`, `Compressor`, `Vocoder` (carrier:
+`Noise` / `Saw`).
 
 ### Зависимости
 

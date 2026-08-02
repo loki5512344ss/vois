@@ -6,6 +6,8 @@ use cpal::{
 };
 use ringbuf::traits::Producer;
 
+const PREFERRED_INPUTS: [&str; 3] = ["pipewire", "pulse", "default"];
+
 pub fn find_input(host: &Host, name: Option<&str>) -> Result<Device> {
     match name {
         Some(name) => host
@@ -13,9 +15,20 @@ pub fn find_input(host: &Host, name: Option<&str>) -> Result<Device> {
             .context("failed to enumerate input devices")?
             .find(|d| d.name().map(|n| n == name).unwrap_or(false))
             .with_context(|| format!("input device {name:?} not found")),
-        None => host
-            .default_input_device()
-            .context("no default input device found"),
+        None => {
+            let mut devices = host
+                .input_devices()
+                .context("failed to enumerate input devices")?;
+            if let Some(device) = devices.find(|d| {
+                d.name()
+                    .map(|n| PREFERRED_INPUTS.iter().any(|p| n == *p))
+                    .unwrap_or(false)
+            }) {
+                return Ok(device);
+            }
+            host.default_input_device()
+                .context("no default input device found")
+        }
     }
 }
 

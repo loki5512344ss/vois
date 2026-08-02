@@ -6,6 +6,8 @@ use cpal::{
 };
 use ringbuf::traits::Consumer;
 
+const PREFERRED_OUTPUTS: [&str; 3] = ["pipewire", "pulse", "default"];
+
 pub fn find_output(host: &Host, name: Option<&str>) -> Result<Device> {
     match name {
         Some(name) => host
@@ -13,9 +15,20 @@ pub fn find_output(host: &Host, name: Option<&str>) -> Result<Device> {
             .context("failed to enumerate output devices")?
             .find(|d| d.name().map(|n| n == name).unwrap_or(false))
             .with_context(|| format!("output device {name:?} not found")),
-        None => host
-            .default_output_device()
-            .context("no default output device found"),
+        None => {
+            let mut devices = host
+                .output_devices()
+                .context("failed to enumerate output devices")?;
+            if let Some(device) = devices.find(|d| {
+                d.name()
+                    .map(|n| PREFERRED_OUTPUTS.iter().any(|p| n == *p))
+                    .unwrap_or(false)
+            }) {
+                return Ok(device);
+            }
+            host.default_output_device()
+                .context("no default output device found")
+        }
     }
 }
 

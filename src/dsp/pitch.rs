@@ -59,6 +59,10 @@ pub struct PitchShifter {
     pub pitch_ratio: f32,
     /// Formant factor: output formants = input formants * ratio (1.0 = unchanged).
     pub formant_ratio: f32,
+
+    fs: u32,
+    /// Detected fundamental of the most recent analysis frame (Hz, 0 = unvoiced).
+    pub last_f0: f32,
 }
 
 impl PitchShifter {
@@ -87,8 +91,6 @@ impl PitchShifter {
         let env_ifft = planner.plan_fft_inverse(fft_size);
         let env_fft = planner.plan_fft_forward(fft_size);
 
-        let _ = sample_rate;
-
         Self {
             n: fft_size,
             hop,
@@ -112,6 +114,8 @@ impl PitchShifter {
             lifter_len: fft_size / 8,
             pitch_ratio: 1.0,
             formant_ratio: 1.0,
+            fs: sample_rate,
+            last_f0: 0.0,
         }
     }
 
@@ -149,6 +153,9 @@ impl PitchShifter {
 
         // Cepstral spectral-envelope estimation (used for formant control).
         self.compute_envelope();
+
+        // Fundamental detection (harmonic product sum) for Auto-Tune.
+        self.detect_f0();
 
         let pr = self.pitch_ratio;
         let fr = self.formant_ratio;
@@ -216,6 +223,37 @@ impl PitchShifter {
             let y = self.spec[i].re * self.window[i] * scale;
             self.out_buf[i] += y;
         }
+    }
+
+    /// Fundamental frequency via harmonic product sum over the magnitude
+    /// spectrum. Sets `last_f0` (Hz), or 0.0 when the frame is unvoiced/weak.
+    fn detect_f0(&mut self) {
+        let n2 = self.n / 2;
+        let bin_hz = self.fs as f32 / self.n as f32;
+        // Search 70..1000 Hz, up to 5 harmonics.
+        let b_min = (70.0 / bin_hz).floor() as usize;
+        let b_max = (1000.0 / bin_hz).floor() as usize;
+        let mut best_bin = 0usize;
+        let mut best_score = 0.0f32;
+        for b in b_min..=b_max.min(n2 / 5) {
+            let mut score = 0.0;
+            for h in 1..=5 {
+                if b * h < n2 {
+                    score += self.mag[b * h];
+                }
+            }
+            if score > best_score {
+                best_score = score;
+                best_bin = b;
+            }
+        }
+        // Voicing threshold: fundamental bin must carry real energy.
+        let peak = self.mag[..n2].iter().cloned().fold(0.0f32, f32::max);
+        self.last_f0 = if best_bin > 0 && self.mag[best_bin] > peak * 0.05 && best_score > 0.0 {
+            best_bin as f32 * bin_hz
+        } else {
+            0.0
+        };
     }
 
     /// Spectral envelope via homomorphic (cepstral) filtering.

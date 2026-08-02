@@ -14,7 +14,9 @@ hound = "3"
 ratatui = "0.28"
 ringbuf = "0.4"
 rustfft = "6"
+serde = { version = "1.0.229", features = ["derive"] }
 signal-hook = "0.3"
+toml = "0.8"
 
 [profile.release]
 opt-level = 3

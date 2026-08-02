@@ -3,7 +3,7 @@
 //! and mouse control.
 
 use crate::dsp::chain::{Control, Mode};
-use crate::dsp::presets::PRESETS;
+use crate::dsp::presets::presets;
 use crate::dsp::stats::Stats;
 use crate::ui::SessionInfo;
 use crossterm::event::{
@@ -30,7 +30,7 @@ const LOGO: [&str; 7] = [
     "        real-time voice changer     ",
 ];
 
-const SETTING_INFO: [&str; 8] = [
+const SETTING_INFO: [&str; 9] = [
     "voice character, previewed live",
     "pitch: higher = girl/kid, lower = deep",
     "formant: brightness / timbre of the voice",
@@ -39,6 +39,7 @@ const SETTING_INFO: [&str; 8] = [
     "silence the output",
     "LIVE = processed, PASSTHROUGH = raw input (A/B)",
     "write processed audio to a WAV file",
+    "auto-tune: snap pitch to the nearest semitone",
 ];
 
 const HELP_TEXT: &str = "\
@@ -101,13 +102,29 @@ struct App {
 impl App {
     /// (preset_idx, preset_name, pitch_st, formant_ratio, gate_db, gain_lin,
     ///  mute, record, tone, mode)
-    fn snapshot(&self) -> (usize, String, f32, f32, f32, f32, bool, bool, bool, Mode) {
+    /// (preset_idx, preset_name, pitch_st, formant_ratio, gate_db, gain_lin,
+    ///  mute, record, tone, pitch_correct, mode)
+    fn snapshot(
+        &self,
+    ) -> (
+        usize,
+        String,
+        f32,
+        f32,
+        f32,
+        f32,
+        bool,
+        bool,
+        bool,
+        bool,
+        Mode,
+    ) {
         self.control
             .lock()
             .map(|c| {
-                let preset = &PRESETS[c.preset_idx.min(PRESETS.len() - 1)];
+                let preset = &presets()[c.preset_idx.min(presets().len() - 1)];
                 (
-                    c.preset_idx.min(PRESETS.len() - 1),
+                    c.preset_idx.min(presets().len() - 1),
                     preset.name.to_string(),
                     preset.pitch_semitones + c.pitch_delta,
                     preset.formant_ratio * 2f32.powf(c.formant_delta / 12.0),
@@ -116,6 +133,7 @@ impl App {
                     c.mute,
                     c.record,
                     c.tone_hz > 0.0,
+                    c.pitch_correct,
                     c.mode,
                 )
             })
@@ -129,17 +147,19 @@ impl App {
                 false,
                 false,
                 false,
+                false,
                 Mode::Live,
             ))
     }
 
     fn setting_value(&self, idx: usize) -> String {
-        let (_, _name, pitch, formant, gate, gain, mute, record, _tone, mode) = self.snapshot();
+        let (_, _name, pitch, formant, gate, gain, mute, record, _tone, tune, mode) =
+            self.snapshot();
         match idx {
-            0 => PRESETS[self
+            0 => presets()[self
                 .control
                 .lock()
-                .map(|c| c.preset_idx.min(PRESETS.len() - 1))
+                .map(|c| c.preset_idx.min(presets().len() - 1))
                 .unwrap_or(0)]
             .name
             .to_string(),
@@ -159,6 +179,7 @@ impl App {
                 Mode::Passthrough => "PASSTHROUGH".to_string(),
             },
             7 => if record { "recording" } else { "off" }.to_string(),
+            8 => if tune { "ON" } else { "off" }.to_string(),
             _ => String::new(),
         }
     }
@@ -167,7 +188,7 @@ impl App {
     fn adjust(&self, idx: usize, step: i32) {
         self.with_ctrl(|c| match idx {
             0 => {
-                let n = PRESETS.len() as i32;
+                let n = presets().len() as i32;
                 c.preset_idx = ((c.preset_idx as i32 + step).rem_euclid(n)) as usize;
             }
             1 => c.pitch_delta += step as f32,
@@ -183,6 +204,7 @@ impl App {
             5 => c.mute = !c.mute,
             6 => c.mode.toggle(),
             7 => c.record = !c.record,
+            8 => c.pitch_correct = !c.pitch_correct,
             _ => {}
         });
     }
@@ -222,22 +244,25 @@ impl App {
 
     fn on_key_main(&mut self, key: crossterm::event::KeyEvent) {
         match key.code {
-            KeyCode::Up => self
-                .with_ctrl(|c| c.preset_idx = (c.preset_idx + PRESETS.len() - 1) % PRESETS.len()),
-            KeyCode::Down => self.with_ctrl(|c| c.preset_idx = (c.preset_idx + 1) % PRESETS.len()),
+            KeyCode::Up => self.with_ctrl(|c| {
+                c.preset_idx = (c.preset_idx + presets().len() - 1) % presets().len()
+            }),
+            KeyCode::Down => {
+                self.with_ctrl(|c| c.preset_idx = (c.preset_idx + 1) % presets().len())
+            }
             KeyCode::Left => self.adjust(1, -1),
             KeyCode::Right => self.adjust(1, 1),
             KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Tab => self.view = View::Settings,
             KeyCode::Char('h') | KeyCode::Char('H') => self.view = View::Help,
             KeyCode::Char('p') | KeyCode::Char('P') => {
-                self.with_ctrl(|c| c.preset_idx = (c.preset_idx + 1) % PRESETS.len())
+                self.with_ctrl(|c| c.preset_idx = (c.preset_idx + 1) % presets().len())
             }
             KeyCode::Char(d) if d.is_ascii_digit() => self.with_ctrl(|c| {
                 let n = d.to_digit(10).unwrap() as usize;
                 c.preset_idx = if n == 0 {
-                    PRESETS.len() - 1
+                    presets().len() - 1
                 } else {
-                    (n - 1).min(PRESETS.len() - 1)
+                    (n - 1).min(presets().len() - 1)
                 };
             }),
             KeyCode::Char('[') => self.adjust(1, -1),
@@ -285,7 +310,7 @@ impl App {
                         && mouse.row < presets_rect.y + presets_rect.height
                     {
                         let idx = (mouse.row - presets_rect.y) as usize;
-                        if idx < PRESETS.len() {
+                        if idx < presets().len() {
                             self.with_ctrl(|c| c.preset_idx = idx);
                         }
                     }
@@ -295,7 +320,7 @@ impl App {
                     let list_rect = rects.0;
                     if mouse.row >= list_rect.y && mouse.row < list_rect.y + list_rect.height {
                         let idx = (mouse.row - list_rect.y) as usize;
-                        if idx < 8 {
+                        if idx < 9 {
                             self.settings_cursor = idx;
                         }
                     }
@@ -371,13 +396,14 @@ impl App {
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect) {
-        let (_, _name, _p, _f, _g, _gain, mute, record, tone, mode) = self.snapshot();
+        let (_, _name, _p, _f, _g, _gain, mute, record, tone, tune, mode) = self.snapshot();
         let mode_txt = match mode {
             Mode::Live => "LIVE",
             Mode::Passthrough => "A/B PASSTHROUGH",
         };
         let rec_txt = if record { "● REC" } else { "" };
         let tone_txt = if tone { "● TONE" } else { "" };
+        let tune_txt = if tune { "● TUNE" } else { "" };
         let mute_txt = if mute { "MUTED" } else { "" };
         let header = Line::from(vec![
             Span::styled(
@@ -407,6 +433,8 @@ impl App {
             Span::raw("  "),
             Span::styled(tone_txt, Style::default().fg(Color::Blue)),
             Span::raw("  "),
+            Span::styled(tune_txt, Style::default().fg(Color::Magenta)),
+            Span::raw("  "),
             Span::styled(
                 mute_txt,
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
@@ -427,7 +455,7 @@ impl App {
 
         self.render_header(f, head);
 
-        let (preset_idx, _name, pitch, formant, gate, gain, mute, _record, _tone, _mode) =
+        let (preset_idx, _name, pitch, formant, gate, gain, mute, _record, _tone, tune, _mode) =
             self.snapshot();
 
         let cols = Layout::default()
@@ -441,7 +469,7 @@ impl App {
 
         // Presets (navigable, live preview).
         let mut plines = Vec::new();
-        for (i, p) in PRESETS.iter().enumerate() {
+        for (i, p) in presets().iter().enumerate() {
             let selected = i == preset_idx;
             let label = format!(
                 "{}{}  {}",
@@ -495,6 +523,16 @@ impl App {
                 if mute { Color::Red } else { Color::DarkGray },
                 "silence output",
             ),
+            p_row(
+                "tune",
+                if tune { "ON" } else { "off" },
+                if tune {
+                    Color::Magenta
+                } else {
+                    Color::DarkGray
+                },
+                "auto-tune: snap pitch",
+            ),
         ];
         let para = Paragraph::new(param_lines).block(block(" parameters · info "));
         f.render_widget(para, cols[1]);
@@ -524,6 +562,7 @@ impl App {
             "Mute",
             "Mode",
             "Record",
+            "Pitch corr",
         ];
         let mut lines = Vec::new();
         for (i, label) in labels.iter().enumerate() {

@@ -500,7 +500,7 @@ impl Effect for Compressor {
 // Channel vocoder (classic robot voice)
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum CarrierKind {
     Noise,
     Saw,
