@@ -1,0 +1,22 @@
+[package]
+name = "vois"
+version = "0.1.0"
+edition = "2021"
+description = "Real-time voice changer written in pure Rust"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+cpal = "0.15"
+crossterm = "0.28"
+hound = "3"
+ratatui = "0.28"
+ringbuf = "0.4"
+rustfft = "6"
+signal-hook = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
