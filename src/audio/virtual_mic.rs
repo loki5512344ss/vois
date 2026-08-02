@@ -1,11 +1,17 @@
-// Virtual microphone setup for PipeWire/PulseAudio.
+// Virtual microphone setup.
 //
-// Creates a "vois.rs" null sink and remaps its monitor source to "vois.rs".
-// The app does NOT hijack the default sink permanently: it briefly points the
-// default sink at `vois.rs` while its own output stream is created (so the
-// processed voice lands in the virtual mic) and restores it right after.
-// Other apps' streams are not moved, so their audio never leaks into the mic.
-use anyhow::{bail, Context, Result};
+// Linux/FreeBSD (PipeWire/PulseAudio): creates a "vois.rs" null sink and
+// remaps its monitor source to "vois.rs", keeps the app's stream routed there
+// and restores the default sink on exit.
+//
+// Other platforms (Windows WASAPI, macOS CoreAudio): no built-in virtual mic.
+// Point the app's output at a virtual cable (e.g. VB-CABLE "CABLE Input" on
+// Windows, BlackHole on macOS) with `-o` and select it in the voice app.
+
+use anyhow::Result;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+use anyhow::{bail, Context};
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -14,7 +20,11 @@ use std::time::Duration;
 
 pub struct VirtualMic;
 
-/// WirePlumber config that stops it from pinning streams to remembered sinks.
+// ---------------------------------------------------------------------------
+// Linux / FreeBSD implementation (PipeWire / PulseAudio + pactl)
+// ---------------------------------------------------------------------------
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn wireplumber_conf() -> std::path::PathBuf {
     let base = std::env::var("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
@@ -28,6 +38,7 @@ fn wireplumber_conf() -> std::path::PathBuf {
         .join("51-vois.conf")
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 impl VirtualMic {
     pub fn setup() -> Result<Option<String>> {
         let pactl = "pactl";
@@ -221,6 +232,7 @@ impl VirtualMic {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn sink_id_named(name: &str) -> Option<String> {
     let out = Command::new("pactl")
         .args(["list", "short", "sinks"])
@@ -235,6 +247,7 @@ fn sink_id_named(name: &str) -> Option<String> {
     None
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn client_names() -> Result<std::collections::HashMap<String, String>> {
     let out = Command::new("pactl")
         .args(["list", "short", "clients"])
@@ -250,6 +263,7 @@ fn client_names() -> Result<std::collections::HashMap<String, String>> {
     Ok(map)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn sink_inputs() -> Result<Vec<(String, String, String)>> {
     let out = Command::new("pactl")
         .args(["list", "short", "sink-inputs"])
@@ -269,7 +283,39 @@ fn sink_inputs() -> Result<Vec<(String, String, String)>> {
     Ok(inputs)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn has_entry(list: &str, name: &str) -> bool {
     list.lines()
         .any(|l| l.split_whitespace().nth(1).is_some_and(|n| n == name))
+}
+
+// ---------------------------------------------------------------------------
+// Other platforms: virtual mic is provided externally (VB-CABLE / BlackHole).
+// ---------------------------------------------------------------------------
+
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+impl VirtualMic {
+    pub fn setup() -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    pub fn get_default_sink() -> Option<String> {
+        None
+    }
+
+    pub fn set_default_sink(_name: &str) {}
+
+    pub fn wait_default_sink(_name: &str) {}
+
+    pub fn keep_others_off(stop: Arc<AtomicBool>, _prev_sink: String) -> thread::JoinHandle<()> {
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_millis(500));
+            }
+        })
+    }
+
+    pub fn restore_on_signal(_prev: String) -> thread::JoinHandle<()> {
+        thread::spawn(|| {})
+    }
 }

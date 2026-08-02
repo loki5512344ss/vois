@@ -104,7 +104,9 @@ fn main() -> Result<()> {
                     "virtual mic ready: use \"{src}\" (or \"vois.rs.monitor\") as your microphone"
                 )
             }
-            Ok(None) => println!("virtual mic setup failed: no source reported"),
+            Ok(None) => println!(
+                "virtual mic not available on this platform: point -o at a virtual cable (e.g. VB-CABLE \"CABLE Input\") and select it in your voice app"
+            ),
             Err(e) => println!("warning: virtual mic setup failed: {e:#}"),
         }
     }

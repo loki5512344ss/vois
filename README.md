@@ -40,7 +40,7 @@ vois.rs turns your microphone into a voice changer in real time: shift pitch and
 | TUI | Full-screen terminal UI with arrow-key + mouse control and live meters |
 | WAV recording | Record the processed audio with the `R` hotkey or `--record` |
 | Test tone | `--tone 220` lets you hear what a preset does without a mic |
-| Cross-platform | Linux (ALSA/PipeWire), macOS (CoreAudio), Windows (WASAPI) |
+| Cross-platform | Linux (ALSA/PipeWire), Windows (WASAPI), macOS (CoreAudio) |
 
 ### Presets
 
@@ -161,7 +161,7 @@ vois.rs превращает твой микрофон в войс-чендже�
 | TUI | Полноэкранный интерфейс с управлением стрелками и мышью, живые уровни |
 | Запись в WAV | Клавиша `R` или `--record` |
 | Тестовый тон | `--tone 220` — послушать пресет без микрофона |
-| Кроссплатформенность | Linux (ALSA/PipeWire), macOS (CoreAudio), Windows (WASAPI) |
+| Кроссплатформенность | Linux (ALSA/PipeWire), Windows (WASAPI), macOS (CoreAudio) |
 
 ### Пресеты
 

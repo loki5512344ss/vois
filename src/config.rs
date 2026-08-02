@@ -101,7 +101,8 @@ impl AppConfig {
             virtual_mic: if cli.no_virtual_mic {
                 false
             } else {
-                file.virtual_mic.unwrap_or(true)
+                file.virtual_mic
+                    .unwrap_or(cfg!(any(target_os = "linux", target_os = "freebsd")))
             },
             pitch_correct: cli.pitch_correct.or(file.pitch_correct).unwrap_or(false),
         }
