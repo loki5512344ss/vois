@@ -816,7 +816,26 @@ pub fn run(control: Arc<Mutex<Control>>, stats: Arc<Mutex<Stats>>, info: Session
         return;
     }
 
-    enable_raw_mode().expect("failed to enable raw mode");
+    if enable_raw_mode().is_err() {
+        // No real terminal: keep the audio running headless.
+        let started = Instant::now();
+        loop {
+            let done = control
+                .lock()
+                .map(|c| {
+                    c.quit || run_seconds > 0 && started.elapsed().as_secs() >= run_seconds as u64
+                })
+                .unwrap_or(true);
+            if done {
+                if let Ok(mut c) = control.lock() {
+                    c.quit = true;
+                }
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        return;
+    }
     let _ = crossterm::execute!(stdout(), crossterm::event::EnableMouseCapture);
     let mut terminal = match Terminal::new(CrosstermBackend::new(stdout())) {
         Ok(t) => t,

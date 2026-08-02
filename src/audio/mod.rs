@@ -47,6 +47,22 @@ fn pick_config(
 pub fn run(cfg: &AppConfig) -> Result<()> {
     let host = cpal::default_host();
 
+    // Virtual mic FIRST: point the default sink at `vois.rs` before ANY audio
+    // device is opened, so the output node is created with vois.rs as its
+    // target (otherwise it latches onto the current default = your speakers).
+    let prev_sink = if cfg.virtual_mic {
+        virtual_mic::VirtualMic::setup()?;
+        virtual_mic::VirtualMic::get_default_sink()
+    } else {
+        None
+    };
+    if prev_sink.is_some() {
+        virtual_mic::VirtualMic::set_default_sink("vois.rs");
+        // Wait for the session manager to apply the new default before the
+        // output node is created, so it latches onto vois.rs and not speakers.
+        virtual_mic::VirtualMic::wait_default_sink("vois.rs");
+    }
+
     let input_device = capture::find_input(&host, cfg.input.as_deref())?;
     let output_device = playback::find_output(&host, cfg.output.as_deref())?;
 
@@ -119,20 +135,6 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
     let ring_cap = (rate.0 as usize * 2).max(8192);
     let (in_prod, in_cons) = HeapRb::<f32>::new(ring_cap).split();
     let (out_prod, out_cons) = HeapRb::<f32>::new(ring_cap).split();
-
-    // Virtual mic: keep `vois.rs` as the default sink for the whole run so the
-    // app's output lands in the virtual mic. A helper thread parks other
-    // apps' streams back on the real sink so their audio doesn't leak into the
-    // mic. The default sink is restored on exit.
-    let prev_sink = if cfg.virtual_mic {
-        virtual_mic::VirtualMic::setup()?;
-        virtual_mic::VirtualMic::get_default_sink()
-    } else {
-        None
-    };
-    if prev_sink.is_some() {
-        virtual_mic::VirtualMic::set_default_sink("vois.rs");
-    }
 
     let input_stream = capture::start(&input_device, &in_supported, in_prod)?;
     let output_stream = playback::start(&output_device, &out_supported, out_cons)?;

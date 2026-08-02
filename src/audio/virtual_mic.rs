@@ -14,6 +14,20 @@ use std::time::Duration;
 
 pub struct VirtualMic;
 
+/// WirePlumber config that stops it from pinning streams to remembered sinks.
+fn wireplumber_conf() -> std::path::PathBuf {
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+    base.join("wireplumber")
+        .join("wireplumber.conf.d")
+        .join("51-vois.conf")
+}
+
 impl VirtualMic {
     pub fn setup() -> Result<Option<String>> {
         let pactl = "pactl";
@@ -72,7 +86,52 @@ impl VirtualMic {
             }
         }
 
+        if Self::ensure_wireplumber_fix() {
+            // First run: the fix needs a WirePlumber restart to apply.
+            Self::restart_wireplumber();
+        }
+
         Ok(Some("vois.rs".to_string()))
+    }
+
+    /// WirePlumber remembers the target of each stream and restores it, so a
+    /// stream that once played to the speakers keeps going there even after the
+    /// default sink is switched. Disabling that makes ALSA streams follow the
+    /// default sink again. Returns true if a config was (re)written.
+    pub fn ensure_wireplumber_fix() -> bool {
+        let conf = wireplumber_conf();
+        let conf_text = "wireplumber.settings = {\n\
+                         \x20 node.stream.restore-target = false\n\
+                         \x20 node.stream.restore-props = false\n\
+                         }\n";
+        if let Ok(existing) = std::fs::read_to_string(&conf) {
+            if existing.contains("restore-target = false") {
+                return false;
+            }
+        }
+        if let Some(dir) = conf.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&conf, conf_text).is_ok()
+    }
+
+    /// Restart WirePlumber so a newly written config takes effect, and wait
+    /// until the audio server responds again.
+    pub fn restart_wireplumber() {
+        let _ = Command::new("systemctl")
+            .args(["--user", "restart", "wireplumber"])
+            .output();
+        for _ in 0..40 {
+            if Command::new("pactl")
+                .args(["info"])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
     }
 
     /// Current default sink name, if any.
@@ -95,13 +154,26 @@ impl VirtualMic {
             .output();
     }
 
-    /// Keep every sink-input that is NOT this app's (client name "vois") away
-    /// from the `vois.rs` sink, moving it to `prev_sink`. Runs until `stop`.
+    /// Wait (up to 2 s) until the default sink is actually `name`. WirePlumber
+    /// applies `set-default-sink` asynchronously; if the app creates its output
+    /// node before that, the node latches onto the old default.
+    pub fn wait_default_sink(name: &str) {
+        for _ in 0..40 {
+            if Self::get_default_sink().as_deref() == Some(name) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Keep this app's streams (client name "vois") on the `vois.rs` sink and
+    /// every other app's streams off it (parked on `prev_sink`). Runs until
+    /// `stop`.
     ///
-    /// WirePlumber routes ALSA streams to the default sink, so while the app
-    /// runs with `vois.rs` as default, other apps' audio would leak into the
-    /// virtual mic. Moving their streams explicitly sticks, so this thread
-    /// parks them on the real output.
+    /// WirePlumber routes ALSA streams to the default sink, so if our output
+    /// node is created before the default is switched, it can end up on the
+    /// speakers; this thread pulls it back onto the virtual mic. Moving
+    /// streams explicitly sticks, so other apps' audio never leaks into it.
     pub fn keep_others_off(stop: Arc<AtomicBool>, prev_sink: String) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             while !stop.load(Ordering::Relaxed) {
@@ -111,7 +183,13 @@ impl VirtualMic {
                     if let (Ok(names), Ok(inputs)) = (client_names(), sink_inputs()) {
                         for (id, sink, client) in &inputs {
                             let ours = names.get(client).map(|n| n == "vois").unwrap_or(false);
-                            if sink == &lv && !ours {
+                            if ours && sink != &lv {
+                                // Our own stream drifted to the speakers.
+                                let _ = Command::new("pactl")
+                                    .args(["move-sink-input", id, "vois.rs"])
+                                    .output();
+                            } else if !ours && sink == &lv {
+                                // Other app leaked into the virtual mic.
                                 let _ = Command::new("pactl")
                                     .args(["move-sink-input", id, &pv])
                                     .output();
